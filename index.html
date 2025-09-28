@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Xadrex 2 — Xadrez Evoluído</title>
+  <style>
+    :root{--bg:#07121a;--panel:#0b1724;--accent:#ffb86b;--p1:#4ea8ff;--p2:#ff6b6b;--cell1:#e6d8c3;--cell2:#6b4f33}
+    *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+    body{margin:0;min-height:100vh;background:linear-gradient(180deg,#03121b,#041026);color:#e6eef8;display:flex;align-items:center;justify-content:center;padding:20px}
+    .app{width:1150px;max-width:98%;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:12px;padding:14px;box-shadow:0 18px 50px rgba(0,0,0,.7)}
+    header{display:flex;justify-content:space-between;align-items:center;padding:8px 12px}
+    h1{margin:0;font-size:20px}
+
+    main{display:flex;gap:16px}
+    .left{width:300px}
+    .panel{background:var(--panel);padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)}
+    label{display:block;color:#bcd3ff;margin-bottom:6px}
+    select,input,button{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+    button.primary{background:linear-gradient(90deg,var(--accent),#ff8a5b);border:none;color:#06121b;font-weight:700;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:#d7e9ff}
+
+    .board-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:10px}
+    .statusbar{width:100%;display:flex;justify-content:space-between;gap:8px}
+    .status{background:rgba(255,255,255,0.02);padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.03)}
+
+    .board{background:linear-gradient(180deg,#071428,#041226);padding:12px;border-radius:10px}
+    .grid{display:grid;grid-template-columns:repeat(8,68px);grid-auto-rows:68px;gap:6px}
+    .cell{width:68px;height:68px;border-radius:8px;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;transition:transform .12s}
+    .cell:hover{transform:translateY(-4px)}
+    .cell.light{background:var(--cell1)}
+    .cell.dark{background:var(--cell2)}
+
+    .piece{width:54px;height:54px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#07121b;box-shadow:0 8px 18px rgba(0,0,0,.6);transition:transform .15s,opacity .15s}
+    .piece.p1{background:linear-gradient(180deg,var(--p1),#1b6fe0)}
+    .piece.p2{background:linear-gradient(180deg,var(--p2),#d64b4b)}
+
+    .hand{display:flex;gap:8px;margin-top:8px}
+    .card{width:92px;padding:8px;border-radius:8px;background:linear-gradient(180deg,#072033,#041726);text-align:center;cursor:pointer;border:1px solid rgba(255,255,255,0.03)}
+    .card h4{margin:2px 0;font-size:13px}
+    .card p{margin:0;font-size:12px;opacity:.9}
+
+    .highlight{outline:3px solid rgba(80,200,120,.25);}
+    .blocked{outline:3px solid rgba(255,200,120,.12)}
+
+    footer{margin-top:10px;text-align:center;color:#9fb7e6}
+
+    @media (max-width:1000px){.grid{grid-template-columns:repeat(8,46px);grid-auto-rows:46px}.cell{width:46px;height:46px}.piece{width:36px;height:36px}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Xadrex 2 — Xadrez Muito melhor</h1>
+      <div style="font-size:13px;opacity:.9">Versão local • 8×8 • capture para comprar cartas</div>
+    </header>
+
+    <main>
+      <div class="left">
+        <div class="panel">
+          <label>Modo</label>
+          <select id="modeSelect"><option value="local">Multiplayer local</option><option value="bot">1 jogador vs Bot</option></select>
+        </div>
+        <div class="panel" id="botOpts" style="margin-top:10px;display:none">
+          <label>Dificuldade do bot</label>
+          <select id="difficulty"><option>Fácil</option><option selected>Médio</option><option>Difícil</option></select>
+        </div>
+        <div class="panel" style="margin-top:10px">
+          <label>Controles</label>
+          <div style="font-size:13px;color:#bcd3ff">Clique em uma peça sua para selecionar e depois na célula de destino. Ao capturar uma peça, você compra uma carta. Use 1 carta por turno clicando nela e escolhendo alvo quando solicitado.</div>
+        </div>
+        <div class="panel" style="margin-top:10px">
+          <label>Placar</label>
+          <div style="display:flex;gap:8px">
+            <div class="status">Brancas: <strong id="scoreP1">0</strong></div>
+            <div class="status">Pretas: <strong id="scoreP2">0</strong></div>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:10px">
+          <label>Sua mão (jogador atual)</label>
+          <div id="handContainer" class="hand"></div>
+          <div style="margin-top:6px;font-size:12px;color:#bcd3ff">Mão máxima: 3 cartas. Cartas compradas ao capturar peças.</div>
+        </div>
+      </div>
+
+      <div class="board-wrap">
+        <div class="statusbar">
+          <div class="status">Turno: <strong id="turnLabel">Brancas</strong></div>
+          <div class="status" id="message">Selecione uma peça</div>
+          <div class="status">Rodada: <strong id="roundNum">1</strong></div>
+        </div>
+
+        <div class="board">
+          <div id="grid" class="grid"></div>
+        </div>
+
+        <div style="width:100%;display:flex;justify-content:space-between;margin-top:8px">
+          <div style="display:flex;gap:8px"><button id="newBtn" class="primary">Novo jogo</button><button id="undoBtn" class="ghost">Desfazer</button></div>
+          <div style="color:#9fb7e6;font-size:13px">Xadrex 2 — mecânicas de xadrez realistas + cartas de habilidade.</div>
+        </div>
+      </div>
+    </main>
+
+    <footer>Xadrex 2 — Xadrez Evoluído com Cartas Especiais</footer>
+  </div>
+
+  <script>
+    /* ======= Config e DOM ======= */
+    const COLS = 8, ROWS = 8;
+    const MAX_HAND = 3;
+    const gridEl = document.getElementById('grid');
+    const handContainer = document.getElementById('handContainer');
+    const turnLabel = document.getElementById('turnLabel');
+    const message = document.getElementById('message');
+    const scoreP1 = document.getElementById('scoreP1');
+    const scoreP2 = document.getElementById('scoreP2');
+    const roundNum = document.getElementById('roundNum');
+    const modeSelect = document.getElementById('modeSelect');
+    const botOpts = document.getElementById('botOpts');
+    const newBtn = document.getElementById('newBtn');
+    const undoBtn = document.getElementById('undoBtn');
+
+    // estado
+    let board = []; // matrix of {type:'pawn','knight'..., player:1/2}
+    let currentPlayer = 1; // 1 = brancas, 2 = pretas
+    let selected = null; // {r,c}
+    let playing = true;
+    let round = 1;
+    let scores = {1:0,2:0};
+    let hands = {1: [], 2: []};
+    let activeCard = null; // card being activated
+    let graveyard = [];
+    let history = [];
+    let walls = []; // {type:'row'|'col',index,remaining}
+    let disguised = [];
+
+    // definição das cartas
+    const CARDS = [
+      {id:'knight', name:'Cavalo Adoidado', desc:'Derruba peças nas casas em L a partir da célula alvo', type:'target'},
+      {id:'bishop', name:'Sniper de Elite', desc:'Acerta até 1 inimigo alinhados na diagonal a partir do alvo', type:'target'},
+      {id:'rook', name:'Proteção Real', desc:'Cria um muro de ponta a ponta (linha ou coluna) que dura 3 rodadas', type:'area'},
+      {id:'queen', name:'Entre os Servos', desc:'Disfarça peça alvo por 2 rodadas', type:'target'},
+      {id:'king', name:'Despertar', desc:'Revive a última peça destruída (coloca na coluna escolhida)', type:'target'},
+      {id:'pawn', name:'Traição do Clero', desc:'Converte um peão inimigo alvo para seu lado', type:'target'}
+    ];
+
+    // peças iniciais (xadrez clássico)
+    function setupInitialBoard(){
+      board = Array.from({length:ROWS}, ()=> Array.from({length:COLS}, ()=> null));
+      const placement = ['rook','knight','bishop','queen','king','bishop','knight','rook'];
+      for(let c=0;c<COLS;c++){ 
+        board[0][c] = {type:placement[c], player:2}; 
+        board[1][c] = {type:'pawn', player:2}; 
+        board[6][c] = {type:'pawn', player:1}; 
+        board[7][c] = {type:placement[c], player:1}; 
+      }
+    }
+
+    /* ======= Render ======= */
+    function createGrid(){
+      gridEl.innerHTML='';
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const cell = document.createElement('div');
+          cell.className = 'cell ' + (((r+c)%2===0)? 'light':'dark');
+          cell.dataset.r=r; cell.dataset.c=c;
+          cell.addEventListener('click', ()=> onCellClick(r,c));
+          gridEl.appendChild(cell);
+        }
+      }
+      renderAll();
+    }
+
+    function renderAll(){
+      // clear
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ 
+        const cell = getCell(r,c); 
+        cell.innerHTML=''; 
+        cell.classList.remove('highlight'); 
+        cell.classList.remove('blocked'); 
+      }
+      
+      // render pieces
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+        const p = board[r][c]; 
+        if(p){ 
+          const el = document.createElement('div'); 
+          el.className='piece ' + (p.player===1? 'p1':'p2'); 
+          el.textContent = pieceSymbol(p.type); 
+          getCell(r,c).appendChild(el); 
+        }
+      }
+      
+      // render walls
+      for(const w of walls){ 
+        if(w.type==='row'){ 
+          for(let c=0;c<COLS;c++) getCell(w.index,c).classList.add('blocked'); 
+        } else { 
+          for(let r=0;r<ROWS;r++) getCell(r,w.index).classList.add('blocked'); 
+        } 
+      }
+      
+      // disguised pieces are simply absent (we already set board to null when disguised)
+      renderHand(); 
+      updateUI();
+    }
+
+    function getCell(r,c){ 
+      return document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`); 
+    }
+
+    function pieceSymbol(type){ // textual symbol minimalista
+      const map = {king:'Rei',queen:'Rainha',rook:'Torre',bishop:'Bispo',knight:'Cavalo',pawn:'Pião'}; 
+      return map[type]||'?'; 
+    }
+
+    /* ======= Interação e movimento (regras simplificadas mas próximas do xadrez) ======= */
+    function onCellClick(r,c){ 
+      if(!playing) return; 
+      
+      // se há carta ativa que requer alvo
+      if(activeCard){ 
+        return handleCardTarget(activeCard,r,c); 
+      }
+      
+      const p = board[r][c];
+      if(selected){ // se já selecionado, tentar mover
+        const sel = selected; 
+        const piece = board[sel.r][sel.c];
+        if(piece && piece.player===currentPlayer && isLegalMove(sel.r,sel.c,r,c,piece)){
+          makeMove(sel.r,sel.c,r,c);
+          selected=null; 
+          renderAll(); 
+          return;
+        } else { // se clicar em outra peça sua, troca seleção
+          if(p && p.player===currentPlayer){ 
+            selected={r,c}; 
+            highlightMoves(r,c); 
+          } else { 
+            selected=null; 
+            renderAll(); 
+            message.textContent='Movimento inválido'; 
+          }
+        }
+      } else {
+        // selecionar peça se for do jogador
+        if(p && p.player===currentPlayer){ 
+          selected={r,c}; 
+          highlightMoves(r,c); 
+        }
+      }
+    }
+
+    function highlightMoves(r,c){ 
+      renderAll(); 
+      const piece = board[r][c]; 
+      if(!piece) return; 
+      const moves = generateMoves(r,c,piece,true); 
+      for(const m of moves){ 
+        getCell(m.r,m.c).classList.add('highlight'); 
+      } 
+    }
+
+    function isLegalMove(sr,sc,tr,tc,piece){ 
+      const moves = generateMoves(sr,sc,piece,false); 
+      if(!moves.some(m=>m.r===tr && m.c===tc)) return false;
+      
+      // simula movimento para verificar se o rei não fica em xeque
+      const backup = deepCopy(board);
+      board[tr][tc] = piece;
+      board[sr][sc] = null;
+      const inCheck = isKingInCheck(piece.player);
+      board = backup;
+      return !inCheck;
+    }
+
+    function generateMoves(r,c,piece,ignoreCheck){
+      const moves=[]; 
+      const dir = piece.player===1? -1:1; // for pawns
+      
+      if(piece.type==='pawn'){
+        const fr = r+dir; 
+        if(inBounds(fr,c) && board[fr][c]===null && !isBlocked(fr,c)) moves.push({r:fr,c});
+        
+        // double move
+        const startRow = piece.player===1?6:1; 
+        const fr2 = r+dir*2; 
+        if(r===startRow && board[fr][c]===null && board[fr2][c]===null) moves.push({r:fr2,c});
+        
+        // captures
+        for(const dc of [-1,1]){ 
+          const cr=r+dir, cc=c+dc; 
+          if(inBounds(cr,cc) && board[cr][cc] && board[cr][cc].player!==piece.player) moves.push({r:cr,c:cc}); 
+        }
+      }
+      
+      if(piece.type==='knight'){
+        const deltas=[[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]];
+        for(const [dr,dc] of deltas){ 
+          const rr=r+dr, cc=c+dc; 
+          if(inBounds(rr,cc) && (!board[rr][cc]||board[rr][cc].player!==piece.player) && !isBlocked(rr,cc)) moves.push({r:rr,c:cc}); 
+        }
+      }
+      
+      if(piece.type==='bishop' || piece.type==='queen'){
+        const dirs=[[1,1],[1,-1],[-1,1],[-1,-1]];
+        for(const [dr,dc] of dirs){ 
+          let rr=r+dr, cc=c+dc; 
+          while(inBounds(rr,cc) && !isBlocked(rr,cc)){ 
+            if(board[rr][cc]){ 
+              if(board[rr][cc].player!==piece.player) moves.push({r:rr,c:cc}); 
+              break; 
+            } 
+            moves.push({r:rr,c:cc}); 
+            rr+=dr; cc+=dc; 
+          } 
+        }
+      }
+      
+      if(piece.type==='rook' || piece.type==='queen'){
+        const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+        for(const [dr,dc] of dirs){ 
+          let rr=r+dr, cc=c+dc; 
+          while(inBounds(rr,cc) && !isBlocked(rr,cc)){ 
+            if(board[rr][cc]){ 
+              if(board[rr][cc].player!==piece.player) moves.push({r:rr,c:cc}); 
+              break; 
+            } 
+            moves.push({r:rr,c:cc}); 
+            rr+=dr; cc+=dc; 
+          } 
+        }
+      }
+      
+      if(piece.type==='king'){
+        for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){ 
+          if(dr===0&&dc===0) continue; 
+          const rr=r+dr, cc=c+dc; 
+          if(inBounds(rr,cc) && (!board[rr][cc]||board[rr][cc].player!==piece.player) && !isBlocked(rr,cc)) moves.push({r:rr,c:cc}); 
+        }
+      }
+      
+      return moves;
+    }
+
+    function inBounds(r,c){ return r>=0&&r<ROWS&&c>=0&&c<COLS; }
+
+    function isBlocked(r,c){ 
+      for(const w of walls){ 
+        if(w.type==='row' && w.index===r) return true; 
+        if(w.type==='col' && w.index===c) return true; 
+      } 
+      return false; 
+    }
+
+    /* ======= Executar movimentos, capturas e comprar cartas ======= */
+    function makeMove(sr,sc,tr,tc){
+      const piece = board[sr][sc]; 
+      const dest = board[tr][tc];
+      
+      history.push(deepCopy(board));
+      
+      // captura
+      if(dest){ // add to graveyard
+        graveyard.push(dest);
+        drawCardFor(currentPlayer); // compra ao capturar
+      }
+      
+      // mover
+      board[tr][tc]=piece; 
+      board[sr][sc]=null;
+      
+      // promoção simples (transformar pawn em queen ao chegar ao fim)
+      if(piece.type==='pawn' && (tr===0||tr===ROWS-1)){ 
+        board[tr][tc].type='queen'; 
+      }
+      
+      // trocar turno
+      currentPlayer=3-currentPlayer; 
+      round++; 
+      decayEffects(); 
+      renderAll(); 
+      updateUI();
+      
+      // verificar estado do jogo
+      checkGameState();
+      
+      // Se for modo bot, fazer jogada do bot
+      if(modeSelect.value === 'bot' && currentPlayer === 2 && playing) {
+        setTimeout(botPlay, 500);
+      }
+    }
+
+    function drawCardFor(player){ 
+      const hand = hands[player]; 
+      if(hand.length>=MAX_HAND) return; 
+      const card = deepCopy(CARDS[Math.floor(Math.random()*CARDS.length)]); 
+      hand.push(card); 
+      renderHand(); 
+    }
+
+    /* ======= Cartas: ativação e efeitos ======= */
+    function renderHand(){ 
+      handContainer.innerHTML=''; 
+      const hand = hands[currentPlayer]; 
+      for(let i=0;i<hand.length;i++){ 
+        const c=hand[i]; 
+        const el=document.createElement('div'); 
+        el.className='card'; 
+        el.innerHTML=`<h4>${c.name}</h4><p>${c.desc}</p>`; 
+        el.addEventListener('click', ()=> activateCard(i)); 
+        handContainer.appendChild(el); 
+      } 
+    }
+
+    function activateCard(index){ 
+      const hand = hands[currentPlayer]; 
+      if(index<0||index>=hand.length) return; 
+      activeCard = { ...hand[index], owner:currentPlayer, index }; 
+      message.textContent = `Carta ativa: ${activeCard.name} — clique no alvo.`; 
+    }
+
+    function handleCardTarget(card,r,c){
+      if(card.id==='knight') return cardKnight(card,r,c);
+      if(card.id==='bishop') return cardBishop(card,r,c);
+      if(card.id==='rook') return cardRook(card,r,c);
+      if(card.id==='queen') return cardQueen(card,r,c);
+      if(card.id==='king') return cardKing(card,r,c);
+      if(card.id==='pawn') return cardPawn(card,r,c);
+    }
+
+    function cardKnight(card,r,c){ 
+      const moves=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]; 
+      let removed=0; 
+      for(const [dr,dc] of moves){ 
+        const rr=r+dr, cc=c+dc; 
+        if(inBounds(rr,cc) && board[rr][cc] && board[rr][cc].player!==card.owner){ 
+          graveyard.push(board[rr][cc]); 
+          board[rr][cc]=null; 
+          removed++; 
+        } 
+      } 
+      consumeCard(card); 
+      message.textContent=`Cavalo: ${removed} peças derrubadas.`; 
+      renderAll(); 
+    }
+
+    function cardBishop(card,r,c){ 
+      const dirs=[[1,1],[1,-1],[-1,1],[-1,-1]]; 
+      let removed=0; 
+      for(const [dr,dc] of dirs){ 
+        let rr=r+dr, cc=c+dc; 
+        while(inBounds(rr,cc)){ 
+          if(board[rr][cc] && board[rr][cc].player!==card.owner){ 
+            graveyard.push(board[rr][cc]); 
+            board[rr][cc]=null; 
+            removed++; 
+            break; 
+          } 
+          rr+=dr; cc+=dc; 
+        } 
+        if(removed>=2) break; 
+      } 
+      consumeCard(card); 
+      message.textContent=`Bispo: ${removed} peças acertadas.`; 
+      renderAll(); 
+    }
+
+    function cardRook(card,r,c){ 
+      // para simplicidade, criaremos muro na linha r
+      walls.push({type:'row', index:r, remaining:3, owner:card.owner}); 
+      consumeCard(card); 
+      message.textContent=`Torre: muro criado na linha ${r} por 3 rodadas.`; 
+      renderAll(); 
+    }
+
+    function cardQueen(card,r,c){ 
+      if(!board[r][c]){ 
+        message.textContent='Alvo inválido'; 
+        return; 
+      } 
+      disguised.push({r,c,orig:board[r][c],turns:2}); 
+      board[r][c]=null; 
+      consumeCard(card); 
+      message.textContent='Rainha: peça disfarçada por 2 rodadas.'; 
+      renderAll(); 
+    }
+
+    function cardKing(card,r,c){ 
+      if(graveyard.length===0){ 
+        message.textContent='Nenhuma peça no cemitério.'; 
+        return; 
+      } 
+      const g=graveyard.pop(); // colocar na coluna c no topo livre
+      for(let rr=ROWS-1;rr>=0;rr--){ 
+        if(board[rr][c]===null && !isBlocked(rr,c)){ 
+          board[rr][c]= {type:g.type, player:card.owner}; 
+          break; 
+        } 
+      } 
+      consumeCard(card); 
+      message.textContent='Rei: peça revivida.'; 
+      renderAll(); 
+    }
+
+    function cardPawn(card,r,c){ 
+      if(!board[r][c] || board[r][c].player===card.owner || board[r][c].type!=='pawn'){ 
+        message.textContent='Alvo inválido (escolha peão inimigo).'; 
+        return; 
+      } 
+      board[r][c].player = card.owner; 
+      consumeCard(card); 
+      message.textContent='Peão convertido.'; 
+      renderAll(); 
+    }
+
+    function consumeCard(card){ 
+      hands[card.owner].splice(card.index,1); 
+      activeCard=null; 
+      renderHand(); 
+    }
+
+    /* ======= Efeitos por rodada ======= */
+    function decayEffects(){ 
+      // walls
+      for(let i=walls.length-1;i>=0;i--){ 
+        walls[i].remaining--; 
+        if(walls[i].remaining<=0) walls.splice(i,1); 
+      }
+      
+      // disguised pieces
+      for(let i=disguised.length-1;i>=0;i--){ 
+        disguised[i].turns--; 
+        if(disguised[i].turns<=0){ 
+          const d=disguised[i]; 
+          board[d.r][d.c]=d.orig; 
+          disguised.splice(i,1); 
+        } 
+      }
+    }
+
+    /* ======= Utilitários ======= */
+    function deepCopy(o){ return JSON.parse(JSON.stringify(o)); }
+
+    function updateUI(){ 
+      turnLabel.textContent = currentPlayer===1? 'Brancas':'Pretas'; 
+      roundNum.textContent = round; 
+      scoreP1.textContent=scores[1]; 
+      scoreP2.textContent=scores[2]; 
+    }
+
+    /* ======= Bot (simples) ======= */
+    function botPlay(){ 
+      // simples: find any movable piece and make random legal move
+      const pieces=[]; 
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ 
+        const p=board[r][c]; 
+        if(p && p.player===2){ 
+          const m=generateMoves(r,c,p,false); 
+          if(m.length) pieces.push({r,c,m}); 
+        } 
+      }
+      
+      if(pieces.length===0) return; 
+      const choice = pieces[Math.floor(Math.random()*pieces.length)]; 
+      const mv = choice.m[Math.floor(Math.random()*choice.m.length)]; 
+      makeMove(choice.r,choice.c,mv.r,mv.c);
+    }
+
+    /* ======= Histórico / desfazer ======= */
+    undoBtn.addEventListener('click', ()=>{ 
+      if(history.length===0) return; 
+      board = history.pop(); 
+      currentPlayer=3-currentPlayer; 
+      renderAll(); 
+      message.textContent='Última jogada desfeita.'; 
+    });
+
+    newBtn.addEventListener('click', ()=>{ startNewGame(); });
+    modeSelect.addEventListener('change', ()=>{ 
+      botOpts.style.display = modeSelect.value==='bot'? 'block':'none'; 
+    });
+
+    function startNewGame(){ 
+      setupInitialBoard(); 
+      hands={1:[],2:[]}; 
+      graveyard=[]; 
+      walls=[]; 
+      disguised=[]; 
+      history=[]; 
+      currentPlayer=1; 
+      round=1; 
+      playing=true; 
+      createGrid(); 
+      updateUI(); 
+      message.textContent='Novo jogo iniciado. Boa sorte!'; 
+    }
+
+    /* ======= Xeque e Xeque-mate ======= */
+    // retorna posição do rei do jogador
+    function findKing(player){
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          if(board[r][c] && board[r][c].type==='king' && board[r][c].player===player){
+            return {r,c};
+          }
+        }
+      }
+      return null;
+    }
+
+    // verifica se o rei está em xeque
+    function isKingInCheck(player){
+      const kingPos = findKing(player);
+      if(!kingPos) return false; // rei foi capturado (fim de jogo)
+      
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const p = board[r][c];
+          if(p && p.player!==player){
+            const moves = generateMoves(r,c,p,false);
+            if(moves.some(m=>m.r===kingPos.r && m.c===kingPos.c)){
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    // verifica se é xeque-mate
+    function isCheckmate(player){
+      if(!isKingInCheck(player)) return false;
+      
+      // tenta todos os movimentos possíveis
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const p = board[r][c];
+          if(p && p.player===player){
+            const moves = generateMoves(r,c,p,false);
+            for(const m of moves){
+              const backup = deepCopy(board);
+              board[m.r][m.c] = p;
+              board[r][c] = null;
+              const stillCheck = isKingInCheck(player);
+              board = backup;
+              if(!stillCheck) return false; // achou um movimento que escapa
+            }
+          }
+        }
+      }
+      return true; // nenhum movimento possível -> xeque-mate
+    }
+
+    // verifica após cada jogada
+    function checkGameState(){
+      const enemy = 3 - currentPlayer;
+      
+      if(isCheckmate(enemy)){
+        message.textContent = `Xeque-mate! ${currentPlayer===1? "Brancas":"Pretas"} venceram.`;
+        playing = false;
+        scores[currentPlayer]++;
+        updateUI();
+      } else if(isKingInCheck(enemy)){
+        message.textContent = `Xeque em ${enemy===1? "Brancas":"Pretas"}!`;
+      } else {
+        message.textContent = 'Movimento realizado.';
+      }
+    }
+
+    // inicial
+    startNewGame();
+  </script>
+</body>
+</html>
